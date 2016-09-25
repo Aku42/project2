@@ -456,9 +456,8 @@ setup_stack (void **esp, char* file_name)
   // push args onto the stack
   int argc = 0;
   char** argv;
-
+  char* save_ptr;
   char* orig_file_name = file_name; // save the file_name pointer
-
   char* token;
   int len = 0; // stores total # of chars including null terminated
  
@@ -481,7 +480,7 @@ setup_stack (void **esp, char* file_name)
     token = strtok_r(file_name, " ", &save_ptr);
     argv_ptr[index++] = (int*) *esp; // stores the argv pointer
 
-    // pushes the token onto the stack 
+    // writes the token onto the stack, char by char
     for (int i = 0; token[i] != NULL; ++i)
     {
       char* letter = (char*) *esp;
@@ -497,7 +496,7 @@ setup_stack (void **esp, char* file_name)
 
   // aligns it
   *esp = (char*) *esp - len - 1; // goes back to first arg written
-  while (*esp % 4 != 0)
+  while (*((int*) esp) % 4 != 0)
   {
     char* letter = (char*) *esp;
     *letter = '\0';
