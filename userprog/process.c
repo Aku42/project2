@@ -38,8 +38,12 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  // need to parse the file_name. file_name now contains just the file_name and no args
+  char* save_ptr;
+  char* file_name_parsed = strtok_r(file_name, " ", &save_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_name_parsed, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -195,7 +199,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, char* file_name);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -214,6 +218,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
+
+  // get the file_name only, and save the ptr for the next strtok_r call
+  char* save_ptr;
+  file_name = strtok_r(file_name, " ", &save_ptr);
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -302,7 +310,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, file_name))
     goto done;
 
   /* Start address. */
@@ -427,7 +435,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char* file_name) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -439,9 +447,98 @@ setup_stack (void **esp)
       if (success)
         *esp = PHYS_BASE;
       else
+      {
         palloc_free_page (kpage);
+	return success;
+      }
     }
+
+  // push args onto the stack
+  int argc = 0;
+  char** argv;
+
+  char* orig_file_name = file_name; // save the file_name pointer
+
+  char* token;
+  int len = 0; // stores total # of chars including null terminated
+ 
+  // counts number of args
+  do 
+  {
+    token = strtok_r(file_name, " ", &save_ptr);
+    ++argc;
+    len += strlen(token) + 1;
+  } 
+  while (token != NULL);
+
+  // start to push the args onto the stack
+  int* argv_ptr[argc];
+  int index = 0;
+  *esp = (char*) *esp - len + 1; // add 1 b/c PHYS_BASE can be written to
+  file_name = orig_file_name;
+  do 
+  {
+    token = strtok_r(file_name, " ", &save_ptr);
+    argv_ptr[index++] = (int*) *esp; // stores the argv pointer
+
+    // pushes the token onto the stack 
+    for (int i = 0; token[i] != NULL; ++i)
+    {
+      char* letter = (char*) *esp;
+      *letter = token[i];
+      *esp = (char*) *esp + 1;
+    }
+    // adds the null terminating 0
+    char* letter = (char*) *esp;
+    *letter = '\0';
+    *esp = (char*) *esp + 1;
+  } 
+  while (token != NULL);
+
+  // aligns it
+  *esp = (char*) *esp - len - 1; // goes back to first arg written
+  while (*esp % 4 != 0)
+  {
+    char* letter = (char*) *esp;
+    *letter = '\0';
+    *esp = (char*) *esp - 1; // goes to the next free spot
+  }
+
+  // pushes the argv pointers onto the stack
+  *esp = (char*) *esp - 4; // stores the sentinel
+  int* argv_data = *esp;
+  *argv_data = 0;
+  for (int i = argc - 1; i >= 0; --i)
+  {
+    *esp = (char*) *esp - 4;
+    int* argv_data = *esp;
+    *argv_data = argv_ptr[i];
+
+    if (i == 0)
+    {
+       // stores the ptr to argv[0]
+       *esp = (char*) *esp - 4;
+       argv_data = *esp;
+       *argv_data = (char*) *esp + 4;
+
+       // stores argc
+       *esp = (char*) *esp - 4;
+       argv_data = *esp;
+       *argv_data = argc;
+
+       // stores the 0 return address
+       *esp = (char*) *esp - 4;
+       argv_data = *esp;
+       *argv_data = 0;
+    }  
+  }
+
+  *esp = (char*) *esp - 1; // go to next free spot
+
   return success;
+
+
+
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
