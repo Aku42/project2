@@ -220,6 +220,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   // get the file_name only, and save the ptr for the next strtok_r call
+  char* orig_file_name = file_name; // save the file name ptr for setup_stack() call
   char* save_ptr;
   file_name = strtok_r(file_name, " ", &save_ptr);
 
@@ -310,7 +311,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp, file_name))
+  if (!setup_stack (esp, orig_file_name))
     goto done;
 
   /* Start address. */
@@ -535,9 +536,6 @@ setup_stack (void **esp, char* file_name)
   *esp = (char*) *esp - 1; // go to next free spot
 
   return success;
-
-
-
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
