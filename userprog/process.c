@@ -41,7 +41,7 @@ process_execute (const char *file_name)
   // need to parse the file_name. file_name_parsed now contains just the file_name and no args
   // make a copy of file_name b/c strtok_r modifiles the source 
   char file_name_cp[strlen(file_name) + 1];
-  strlcpy(file_name_cp, file_name, strlen(file_name));
+  strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
   char* save_ptr;
   char* file_name_parsed = strtok_r(file_name_cp, " ", &save_ptr);
@@ -223,18 +223,20 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  // creates 2 copies of file_name. one for strtok_r and one for setup_stack
+  // create a copy of file_name 
   char file_name_cp[strlen(file_name) + 1];
-  strlcpy(file_name_cp, file_name, strlen(file_name));
+  strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
-
-  char file_name_cp_stack[strlen(file_name) + 1];
-  strlcpy(file_name_cp_stack, file_name, strlen(file_name));
-  file_name_cp_stack[strlen(file_name)] = '\0'; // null terminate it  
   
   // get the file_name only
   char* save_ptr;
-  file_name = strtok_r(file_name_cp, " ", &save_ptr);
+  char* file_name_parsed = strtok_r(file_name_cp, " ", &save_ptr);
+
+  // restores the file_name_cp since strtok_r changed it
+  strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
+  file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
+
+  file_name = file_name_parsed; //sets the file_name to just file name and no args
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -323,7 +325,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp, file_name_cp_stack))
+  if (!setup_stack (esp, file_name_cp))
     goto done;
 
   /* Start address. */
@@ -474,7 +476,7 @@ setup_stack (void **esp, char* file_name)
 
   // creates a copy of file_name 
   char file_name_cp[strlen(file_name) + 1];
-  strlcpy(file_name_cp, file_name, strlen(file_name));
+  strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
 
   // counts number of args
