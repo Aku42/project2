@@ -225,13 +225,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   // creates 2 copies of file_name. one for strtok_r and one for setup_stack
   char file_name_cp[strlen(file_name) + 1];
-  strlcpy(file_name_cp, file_name, strlen(file_name));
+  strlcpy(file_name_cp, file_name, strlen(file_name)+1);
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
 
   char file_name_cp_stack[strlen(file_name) + 1];
-  strlcpy(file_name_cp_stack, file_name, strlen(file_name));
+  strlcpy(file_name_cp_stack, file_name, strlen(file_name)+1);
   file_name_cp_stack[strlen(file_name)] = '\0'; // null terminate it  
   
+
   // get the file_name only
   char* save_ptr;
   file_name = strtok_r(file_name_cp, " ", &save_ptr);
@@ -241,6 +242,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+
+	//printf("%s\n", file_name);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -474,7 +477,7 @@ setup_stack (void **esp, char* file_name)
 
   // creates a copy of file_name 
   char file_name_cp[strlen(file_name) + 1];
-  strlcpy(file_name_cp, file_name, strlen(file_name));
+  strlcpy(file_name_cp, file_name, strlen(file_name)+1);
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
 
   // counts number of args
@@ -489,7 +492,9 @@ setup_stack (void **esp, char* file_name)
       token = strtok_r(NULL, " ", &save_ptr);
     }
     ++argc;
-    len += strlen(token) + 1;
+		if(token!= NULL){
+    	len += strlen(token) + 1;
+		}
   } 
   while (token != NULL);
 
@@ -510,21 +515,23 @@ setup_stack (void **esp, char* file_name)
     {
       token = strtok_r(NULL, " ", &save_ptr);
     }
-    argv_ptr[index++] = (int*) *esp; // stores the argv pointer
+		if(token!=NULL){
+	    argv_ptr[index++] = (int*) *esp; // stores the argv pointer
 
-    // writes the token onto the stack, char by char
-    for (int i = 0; token[i] != '\0'; ++i)
-    {
-      char* letter = (char*) *esp;
-      *letter = token[i];
-      *esp = (char*) *esp + 1;
-    }
-    // adds the null terminating 0
-    char* letter = (char*) *esp;
-    *letter = '\0';
-    *esp = (char*) *esp + 1;
-  } 
-  while (token != NULL);
+  	  // writes the token onto the stack, char by char
+  	  for (int i = 0; token[i] != '\0'; ++i)
+ 	   	{
+ 	     char* letter = (char*) *esp;
+ 	     *letter = token[i];
+ 	     *esp = (char*) *esp + 1;
+ 	   	}
+ 	   	// adds the null terminating 0
+ 	   	char* letter = (char*) *esp;
+ 	   	*letter = '\0';
+ 	   	*esp = (char*) *esp + 1;
+ 	 		} 
+  }
+	while (token != NULL);
 
   // aligns it
   *esp = (char*) *esp - len - 1; // goes back to first arg written
