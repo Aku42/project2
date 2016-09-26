@@ -38,9 +38,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  // need to parse the file_name. file_name now contains just the file_name and no args
+  // need to parse the file_name. file_name_parsed now contains just the file_name and no args
+  // make a copy of file_name b/c strtok_r modifiles the source 
+  char file_name_cp[strlen(file_name) + 1];
+  strlcpy(file_name_cp, file_name, strlen(file_name));
+  file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
   char* save_ptr;
-  char* file_name_parsed = strtok_r(file_name, " ", &save_ptr);
+  char* file_name_parsed = strtok_r(file_name_cp, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name_parsed, PRI_DEFAULT, start_process, fn_copy);
@@ -219,10 +223,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  // get the file_name only, and save the ptr for the next strtok_r call
-  char* orig_file_name = file_name; // save the file name ptr for setup_stack() call
+  // creates 2 copies of file_name. one for strtok_r and one for setup_stack
+  char file_name_cp[strlen(file_name) + 1];
+  strlcpy(file_name_cp, file_name, strlen(file_name));
+  file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
+
+  char file_name_cp_stack[strlen(file_name) + 1];
+  strlcpy(file_name_cp_stack, file_name, strlen(file_name));
+  file_name_cp_stack[strlen(file_name)] = '\0'; // null terminate it  
+  
+  // get the file_name only
   char* save_ptr;
-  file_name = strtok_r(file_name, " ", &save_ptr);
+  file_name = strtok_r(file_name_cp, " ", &save_ptr);
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -311,7 +323,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp, orig_file_name))
+  if (!setup_stack (esp, file_name_cp_stack))
     goto done;
 
   /* Start address. */
@@ -456,16 +468,26 @@ setup_stack (void **esp, char* file_name)
 
   // push args onto the stack
   int argc = 0;
-  char** argv;
-  char* save_ptr;
-  char* orig_file_name = file_name; // save the file_name pointer
+  char* save_ptr = NULL;
   char* token;
   int len = 0; // stores total # of chars including null terminated
- 
+
+  // creates a copy of file_name 
+  char file_name_cp[strlen(file_name) + 1];
+  strlcpy(file_name_cp, file_name, strlen(file_name));
+  file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
+
   // counts number of args
   do 
   {
-    token = strtok_r(file_name, " ", &save_ptr);
+    if (save_ptr == NULL) // the 1st iteration
+    {
+      token = strtok_r(file_name, " ", &save_ptr);
+    }
+    else // after 1st iteration, source must be NULL
+    {
+      token = strtok_r(NULL, " ", &save_ptr);
+    }
     ++argc;
     len += strlen(token) + 1;
   } 
@@ -475,14 +497,23 @@ setup_stack (void **esp, char* file_name)
   int* argv_ptr[argc];
   int index = 0;
   *esp = (char*) *esp - len + 1; // add 1 b/c PHYS_BASE can be written to
-  file_name = orig_file_name;
+  file_name = file_name_cp; // reset the file_name 
+  save_ptr = NULL;
+
   do 
   {
-    token = strtok_r(file_name, " ", &save_ptr);
+    if (save_ptr == NULL) // the 1st iteration
+    {
+      token = strtok_r(file_name, " ", &save_ptr);
+    }
+    else // after 1st iteration, source must be NULL
+    {
+      token = strtok_r(NULL, " ", &save_ptr);
+    }
     argv_ptr[index++] = (int*) *esp; // stores the argv pointer
 
     // writes the token onto the stack, char by char
-    for (int i = 0; token[i] != NULL; ++i)
+    for (int i = 0; token[i] != '\0'; ++i)
     {
       char* letter = (char*) *esp;
       *letter = token[i];
@@ -512,14 +543,14 @@ setup_stack (void **esp, char* file_name)
   {
     *esp = (char*) *esp - 4;
     int* argv_data = *esp;
-    *argv_data = argv_ptr[i];
+    *argv_data = (int) argv_ptr[i];
 
     if (i == 0)
     {
        // stores the ptr to argv[0]
        *esp = (char*) *esp - 4;
        argv_data = *esp;
-       *argv_data = (char*) *esp + 4;
+       *argv_data = (int) ((char*) *esp + 4);
 
        // stores argc
        *esp = (char*) *esp - 4;
