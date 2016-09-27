@@ -225,14 +225,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   // create a copy of file_name 
   char file_name_cp[strlen(file_name) + 1];
-  strlcpy(file_name_cp, file_name, strlen(file_name)+1);
+  strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
-
-  char file_name_cp_stack[strlen(file_name) + 1];
-  strlcpy(file_name_cp_stack, file_name, strlen(file_name)+1);
-  file_name_cp_stack[strlen(file_name)] = '\0'; // null terminate it  
   
-
   // get the file_name only
   char* save_ptr;
   char* file_name_parsed = strtok_r(file_name_cp, " ", &save_ptr);
@@ -248,8 +243,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
-
-	//printf("%s\n", file_name);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -459,6 +452,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, char* file_name) 
 {
+  printf("inside setup_stack()\n");
+
   uint8_t *kpage;
   bool success = false;
 
@@ -475,6 +470,8 @@ setup_stack (void **esp, char* file_name)
       }
     }
 
+  printf("inside setup_stack(), about to start my function\n");
+
   // push args onto the stack
   int argc = 0;
   char* save_ptr = NULL;
@@ -483,28 +480,19 @@ setup_stack (void **esp, char* file_name)
 
   // creates a copy of file_name 
   char file_name_cp[strlen(file_name) + 1];
-<<<<<<< HEAD
-  strlcpy(file_name_cp, file_name, strlen(file_name)+1);
-=======
   strlcpy(file_name_cp, file_name, strlen(file_name) + 1);
->>>>>>> 306598fb8fbc2b30458cc0753ae4abe855579ef9
   file_name_cp[strlen(file_name)] = '\0'; // null terminate it  
 
   // counts number of args
+  token = strtok_r(file_name, " ", &save_ptr); // the 1st iteration
+
   do 
   {
-    if (save_ptr == NULL) // the 1st iteration
-    {
-      token = strtok_r(file_name, " ", &save_ptr);
-    }
-    else // after 1st iteration, source must be NULL
-    {
-      token = strtok_r(NULL, " ", &save_ptr);
-    }
     ++argc;
-		if(token!= NULL){
-    	len += strlen(token) + 1;
-		}
+    len += strlen(token) + 1;
+
+    // after 1st iteration, source must be NULL
+    token = strtok_r(NULL, " ", &save_ptr);
   } 
   while (token != NULL);
 
@@ -515,41 +503,35 @@ setup_stack (void **esp, char* file_name)
   file_name = file_name_cp; // reset the file_name 
   save_ptr = NULL;
 
+  token = strtok_r(file_name, " ", &save_ptr); // the 1st iteration
   do 
   {
-    if (save_ptr == NULL) // the 1st iteration
-    {
-      token = strtok_r(file_name, " ", &save_ptr);
-    }
-    else // after 1st iteration, source must be NULL
-    {
-      token = strtok_r(NULL, " ", &save_ptr);
-    }
-		if(token!=NULL){
-	    argv_ptr[index++] = (int*) *esp; // stores the argv pointer
+    argv_ptr[index++] = (int*) *esp; // stores the argv pointer
 
-  	  // writes the token onto the stack, char by char
-  	  for (int i = 0; token[i] != '\0'; ++i)
- 	   	{
- 	     char* letter = (char*) *esp;
- 	     *letter = token[i];
- 	     *esp = (char*) *esp + 1;
- 	   	}
- 	   	// adds the null terminating 0
- 	   	char* letter = (char*) *esp;
- 	   	*letter = '\0';
- 	   	*esp = (char*) *esp + 1;
- 	 		} 
-  }
-	while (token != NULL);
-
-  // aligns it
-  *esp = (char*) *esp - len - 1; // goes back to first arg written
-  while (*((int*) esp) % 4 != 0)
-  {
+    // writes the token onto the stack, char by char
+    for (int i = 0; token[i] != '\0'; ++i)
+    {
+      char* letter = (char*) *esp;
+      *letter = token[i];
+      *esp = (char*) *esp + 1;
+    }
+    // adds the null terminating 0
     char* letter = (char*) *esp;
     *letter = '\0';
+    *esp = (char*) *esp + 1;
+
+    // after 1st iteration, source must be NULL
+    token = strtok_r(NULL, " ", &save_ptr);
+  } 
+  while (token != NULL);
+
+  // aligns it
+  *esp = (char*) *esp - len; // goes back to first arg written
+  while (*((int*) esp) % 4 != 0)
+  {
     *esp = (char*) *esp - 1; // goes to the next free spot
+    char* letter = (char*) *esp;
+    *letter = '\0';
   }
 
   // pushes the argv pointers onto the stack
@@ -559,25 +541,25 @@ setup_stack (void **esp, char* file_name)
   for (int i = argc - 1; i >= 0; --i)
   {
     *esp = (char*) *esp - 4;
-    int* argv_data = *esp;
-    *argv_data = (int) argv_ptr[i];
+    int** argv_data = *esp;
+    *argv_data = (int*) argv_ptr[i];
 
     if (i == 0)
     {
        // stores the ptr to argv[0]
        *esp = (char*) *esp - 4;
        argv_data = *esp;
-       *argv_data = (int) ((char*) *esp + 4);
+       *argv_data = (int*) ((char*) *esp + 4);
 
        // stores argc
        *esp = (char*) *esp - 4;
-       argv_data = *esp;
-       *argv_data = argc;
+       int* argc_data = *esp;
+       *argc_data = (int) argc;
 
        // stores the 0 return address
        *esp = (char*) *esp - 4;
        argv_data = *esp;
-       *argv_data = 0;
+       *argv_data = (int*) 0;
     }  
   }
 
